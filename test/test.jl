@@ -1,5 +1,5 @@
 import CUDArt, CUDAdrv
-using Base.Test
+using Base.Test, Defer
 import Compat.view
 
 #########################
@@ -23,10 +23,10 @@ end
 result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
     # Copying memory to and from device
     @test length(devlist) == 1
-    CUDArt.device(devlist[1])
+    @! CUDArt.device(devlist[1])
     # Test CudaArrays and CudaPitchedArrays
     for AT in (CUDArt.CudaArray, CUDArt.CudaPitchedArray)
-        g = AT(Float64, (5,3))
+        g = @! AT(Float64, (5,3))
         if AT == CUDArt.CudaPitchedArray
             p = pointer(g)
             @test p.xsize == 5
@@ -35,7 +35,7 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
         h = CUDArt.to_host(g)
         @test typeof(h) == Array{Float64,2}
         @test size(h) == (5,3)
-        g2 = AT(1:5)
+        g2 = @! AT(1:5)
         g3 = similar(g2)
         @test eltype(g3) == eltype(g2)
         @test size(g3) == size(g2)
@@ -72,13 +72,13 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
         fill!(g, NaN)
         h = CUDArt.to_host(g)
         @test isequal(h, fill(NaN, size(g)))
-        gbig = AT(Int32, (2000,1000))
+        gbig = @! AT(Int32, (2000,1000))
         fill!(gbig, -17)
         hbig = CUDArt.to_host(gbig)
         @test all(hbig .== -17) && size(hbig) == (2000,1000)
         # Element-type conversions
         h32 = rand(Float32, (5,3))
-        g64 = AT(Float64, (5,3))
+        g64 = @! AT(Float64, (5,3))
         copy!(g64, h32)
         # AbstractArray fallbacks
         s32 = view(h32, 5:-1:1, :)
@@ -86,8 +86,8 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
     end
     # Getting portions of an array
     h_src = reshape(1.0:15.0, 3, 5)
-    d_src = CUDArt.CudaPitchedArray(h_src)
-    d_dest = CUDArt.CudaPitchedArray(Float64, (1, 2))
+    d_src = @! CUDArt.CudaPitchedArray(h_src)
+    d_dest = @! CUDArt.CudaPitchedArray(Float64, (1, 2))
     get!(d_dest, d_src, (2,2:3), NaN)
     h_dest = CUDArt.to_host(d_dest)
     @test h_dest == [5 8]
@@ -99,8 +99,8 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
     @test isequal(h_dest, [15 7.3])
     # Copies between CudaPitchedArrays and CudaArrays
     A = rand(map(UInt16, 5:11), 7, 2)
-    GA = CUDArt.CudaArray(A)
-    GP = CUDArt.CudaPitchedArray(eltype(A), size(A))
+    GA = @! CUDArt.CudaArray(A)
+    GP = @! CUDArt.CudaPitchedArray(eltype(A), size(A))
     copy!(GP, GA)
     H = CUDArt.to_host(GP)
     @test H == A
@@ -110,10 +110,10 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
     H = CUDArt.to_host(GA)
     @test H == A
     # HostArray (pinned memory)
-    A = CUDArt.HostArray(Int32, (6,4))
+    A = @! CUDArt.HostArray(Int32, (6,4))
     A[2,2] = 7
     @test A[2,2] == 7
-    G = CUDArt.CudaArray(A)
+    G = @! CUDArt.CudaArray(A)
     CUDArt.device_synchronize()
     A[2,2] = 3
     @test A[2,2] == 3
@@ -127,11 +127,11 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
         S = unsafe_wrap(Array, pointer(A)+48, (6,2), false)  # a "SubArray"
     end
     B = rand(map(Int32, 1:15), 6, 2)
-    GB = CUDArt.CudaArray(B)
+    GB = @! CUDArt.CudaArray(B)
     copy!(S, GB)
     CUDArt.device_synchronize()
     @test A[:,3:4] == B
-    GB = CUDArt.CudaPitchedArray(2B)
+    GB = @! CUDArt.CudaPitchedArray(2B)
     copy!(S, GB)
     CUDArt.device_synchronize()
     @test A[:,3:4] == 2B
@@ -141,15 +141,15 @@ result = CUDArt.devices(dev->CUDArt.capability(dev)[1] >= 2, nmax=1) do devlist
         n = 5
         Am = rand(m, n)
         Av = rand(n)
-        d_Am = CUDArt.CudaArray(Am)
-        d_Av = CUDArt.CudaArray(Av)
+        d_Am = @! CUDArt.CudaArray(Am)
+        d_Av = @! CUDArt.CudaArray(Av)
         d_Amvec = vec(d_Am)
         d_Avvec = vec(d_Av)
         @test CUDArt.to_host(d_Amvec) == vec(Am)
         @test CUDArt.to_host(d_Avvec) == Av
     end
     # Issue #41
-    a = CUDArt.CudaArray(zeros(2))
+    a = @! CUDArt.CudaArray(zeros(2))
     @test func41(a, (2,1,1,1)) == Cint[2,1,1,1]
     # Comment in PR #50
     CUDArt.cudasleep(1)
@@ -199,3 +199,5 @@ if CUDArt.devcount() > 1
         nothing
     end
 end
+
+pop_scope!(1)

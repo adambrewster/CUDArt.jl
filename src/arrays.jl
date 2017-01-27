@@ -133,6 +133,7 @@ function reinterpret{R,S,N}(::Type{R}, g::CudaArray{S}, dims::NTuple{N,Int})
     CudaArray{R,N}(g.ptr, dims, g.dev)
 end
 
+Base.close(g::CudaArray) = free(g)
 free(g::CudaArray) = free(pointer(g))
 
 if debugMemory
@@ -188,9 +189,7 @@ function CudaPitchedArray(T::Type, dims::Dims)
     pp = rt.cudaPitchedPtr(pp, dims[1]) # correct the xsize
     cptr = pp.ptr
     dev = device()
-    cuda_ptrs[WeakRef(cptr)] = dev
     g = CudaPitchedArray{T,length(dims)}(pp, dims, dev)
-    finalizer(g, free)
     g
 end
 
@@ -246,10 +245,10 @@ function reinterpret{R,S}(::Type{R}, g::CudaPitchedArray{S}, dims::Dims)
     CudaPitchedArray{R,length(dims)}(newptr, dims, g.dev)
 end
 
+Base.close(g::CudaPitchedArray) = free(g)
 function free(g::CudaPitchedArray)
     p = g.ptr.ptr
-    if p != C_NULL && haskey(cuda_ptrs, p)
-        delete!(cuda_ptrs, p)
+    if p != C_NULL
         rt.cudaFree(p)
         g.ptr = rt.cudaPitchedPtr()
     end
@@ -393,13 +392,12 @@ function HostArray{T}(::Type{T}, sz::Dims; flags::Integer=rt.cudaHostAllocDefaul
         data = unsafe_wrap(Array, unsafe_convert(Ptr{T}, ptr), sz, false)
     end
     ha = HostArray(ptr, data)
-    finalizer(ha, free)
-    cuda_ptrs[WeakRef(ptr)] = device()
     ha
 end
 
+Base.close(g::HostArray) = free(g)
 function free(ha::HostArray)
-    if ha.ptr != C_NULL && haskey(cuda_ptrs, ha.ptr)
+    if ha.ptr != C_NULL
         rt.cudaFreeHost(ha.ptr)
         ha.ptr = C_NULL
         ha.data = Array(eltype(ha), ntuple(d->0, ndims(ha)))

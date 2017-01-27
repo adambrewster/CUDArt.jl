@@ -6,6 +6,12 @@ using Compat
 # so these typealiases are safe (if you don't need access to
 # struct elements)
 typealias cudaUUID_t Void
+typealias textureReference Void
+typealias surfaceReference Void
+typealias surfaceReference Void
+typealias cudaTextureObject_t Void
+typealias cudaTextureDesc Void
+typealias cudaSurfaceObject_t Void
 
 function checkerror(code::Cuint)
     if code == cudaSuccess

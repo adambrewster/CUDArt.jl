@@ -4,7 +4,7 @@ module CUDArt
 
 using CUDAdrv
 
-using Compat
+using Compat, Defer
 import Compat: UTF8String, ASCIIString
 
 export
