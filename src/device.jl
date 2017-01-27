@@ -13,27 +13,9 @@ end
 device_reset() = device_reset(device())
 
 function device_reset(dev::Integer)
-    # Clear all items on this device from cuda_ptrs, so they don't get
-    # freed later
-    todelete = Any[]
-    for (p,pdev) in cuda_ptrs
-        if pdev == dev
-            finalize(p)
-            push!(todelete, p)
-        end
-    end
-    for p in todelete
-        delete!(cuda_ptrs, p)
-    end
-
-    # no need to reset the entire device, just reset the primary context
-    pctx = CuPrimaryContext(dev)
-    let ctx = contexts[dev]
-        CUDAdrv.invalidate!(ctx)
-        CUDAdrv.destroy(ctx)
-    end
-    CUDAdrv.reset(pctx)
-    contexts[dev] = CuContext(pctx)
+    # Reset the device
+    device(dev)
+    rt.cudaDeviceReset()
 end
 
 device_synchronize() = rt.cudaDeviceSynchronize()
@@ -62,18 +44,15 @@ end
 function devices(f::Function, criteria::Function;
                  nmax::Integer = typemax(Int), status = :any)
     devlist = devices(criteria, nmax=nmax, status=status)
-    devices(f, devlist)
+    @scope devices(f, devlist)
 end
 
 function devices(f::Function, devlist::Union{Integer,AbstractVector})
-    local ret
-    try
+    scope() do
         init(devlist)
-        ret = f(devlist)
-    finally
-        close(devlist)
+        @! devlist
+        f(devlist)
     end
-    ret
 end
 
 function filter_free(devlist)
@@ -165,10 +144,10 @@ function init(devlist::Union{Integer,AbstractVector})
     end
 end
 
-function close(devlist::Union{Integer,AbstractVector})
+function Base.close(devlist::Union{Integer,AbstractVector})
     for dev in devlist
         if haskey(ptxdict, dev)
-            # CUDAdrv unloads the module using a finalizer
+            close(ptxdict[dev].mod)
             delete!(ptxdict, dev)
         end
         device_reset(dev)

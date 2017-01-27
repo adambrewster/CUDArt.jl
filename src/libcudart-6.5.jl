@@ -6,6 +6,12 @@ using Compat
 # so these typealiases are safe (if you don't need access to
 # struct elements)
 const cudaUUID_t = Void
+const textureReference = Void
+const surfaceReference = Void
+const surfaceReference = Void
+const cudaTextureObject_t = Void
+const cudaTextureDesc = Void
+const cudaSurfaceObject_t = Void
 
 function checkerror(code::Cuint)
     if code == cudaSuccess
